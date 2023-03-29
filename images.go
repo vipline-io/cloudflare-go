@@ -80,7 +80,9 @@ type ImageUpdateRequest struct {
 
 // ImageDirectUploadURLRequest is the data required for a CreateImageDirectUploadURL request.
 type ImageDirectUploadURLRequest struct {
-	Expiry time.Time `json:"expiry"`
+	Expiry            time.Time      `json:"expiry"`
+	Metadata          map[string]any `json:"metadata"`
+	RequireSignedURLs bool           `json:"requireSignedURLs"`
 }
 
 // ImageDirectUploadURLResponse is the API response for a direct image upload url.
@@ -180,9 +182,9 @@ func (api *API) UpdateImage(ctx context.Context, accountID string, id string, im
 
 // CreateImageDirectUploadURL creates an authenticated direct upload url.
 //
-// API Reference: https://api.cloudflare.com/#cloudflare-images-create-authenticated-direct-upload-url
+// API Reference: https://developers.cloudflare.com/api/operations/cloudflare-images-create-authenticated-direct-upload-url-v-2
 func (api *API) CreateImageDirectUploadURL(ctx context.Context, accountID string, params ImageDirectUploadURLRequest) (ImageDirectUploadURL, error) {
-	uri := fmt.Sprintf("/accounts/%s/images/v1/direct_upload", accountID)
+	uri := fmt.Sprintf("/accounts/%s/images/v2/direct_upload", accountID)
 
 	res, err := api.makeRequestContext(ctx, http.MethodPost, uri, params)
 	if err != nil {
