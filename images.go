@@ -72,6 +72,39 @@ func (b ImageUploadRequest) write(mpw *multipart.Writer) error {
 	return nil
 }
 
+type ImageUploadFromUrlRequest struct {
+	Metadata          map[string]any `json:"metadata"`
+	RequireSignedURLs bool           `json:"requireSignedURLs"`
+	Url               string         `json:"url"`
+}
+
+func (b ImageUploadFromUrlRequest) write(mpw *multipart.Writer) error {
+	err := mpw.WriteField("url", b.Url)
+	if err != nil {
+		return err
+	}
+
+	if b.RequireSignedURLs {
+		err = mpw.WriteField("requireSignedURLs", "true")
+		if err != nil {
+			return err
+		}
+	}
+
+	if b.Metadata != nil {
+		part, err := mpw.CreateFormField("metadata")
+		if err != nil {
+			return err
+		}
+		err = json.NewEncoder(part).Encode(b.Metadata)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // ImageUpdateRequest is the data required for an UpdateImage request.
 type ImageUpdateRequest struct {
 	RequireSignedURLs bool                   `json:"requireSignedURLs"`
@@ -129,6 +162,42 @@ type ImagesStatsCount struct {
 //
 // API Reference: https://api.cloudflare.com/#cloudflare-images-upload-an-image-using-a-single-http-request
 func (api *API) UploadImage(ctx context.Context, accountID string, upload ImageUploadRequest) (Image, error) {
+	uri := fmt.Sprintf("/accounts/%s/images/v1", accountID)
+
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	if err := upload.write(w); err != nil {
+		_ = w.Close()
+		return Image{}, fmt.Errorf("error writing multipart body: %w", err)
+	}
+	_ = w.Close()
+
+	res, err := api.makeRequestContextWithHeaders(
+		ctx,
+		http.MethodPost,
+		uri,
+		body,
+		http.Header{
+			"Accept":       []string{"application/json"},
+			"Content-Type": []string{w.FormDataContentType()},
+		},
+	)
+	if err != nil {
+		return Image{}, err
+	}
+
+	var imageDetailsResponse ImageDetailsResponse
+	err = json.Unmarshal(res, &imageDetailsResponse)
+	if err != nil {
+		return Image{}, fmt.Errorf("%s: %w", errUnmarshalError, err)
+	}
+	return imageDetailsResponse.Result, nil
+}
+
+// UploadImageFromUrl uploads a single image from provided url.
+//
+// API Reference: https://developers.cloudflare.com/api/operations/cloudflare-images-upload-an-image-via-url
+func (api *API) UploadImageFromUrl(ctx context.Context, accountID string, upload ImageUploadFromUrlRequest) (Image, error) {
 	uri := fmt.Sprintf("/accounts/%s/images/v1", accountID)
 
 	body := &bytes.Buffer{}
