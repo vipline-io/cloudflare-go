@@ -219,8 +219,12 @@ func (api *API) UploadImage(ctx context.Context, rc *ResourceContainer, params U
 // UploadImageFromUrl uploads a single image from provided url.
 //
 // API Reference: https://developers.cloudflare.com/api/operations/cloudflare-images-upload-an-image-via-url
-func (api *API) UploadImageFromUrl(ctx context.Context, accountID string, upload ImageUploadFromUrlRequest) (Image, error) {
-	uri := fmt.Sprintf("/accounts/%s/images/v1", accountID)
+func (api *API) UploadImageFromUrl(ctx context.Context, rc *ResourceContainer, upload ImageUploadFromUrlRequest) (Image, error) {
+	if rc.Level != AccountRouteLevel {
+		return Image{}, ErrRequiredAccountLevelResourceContainer
+	}
+
+	uri := fmt.Sprintf("/accounts/%s/images/v1", rc.Identifier)
 
 	body := &bytes.Buffer{}
 	w := multipart.NewWriter(body)
