@@ -81,8 +81,8 @@ const (
 			  }
             },
 			"d1_databases": {
-				"D1_BINDING": { 
-					"id": "a94509c6-0757-43f3-b053-474b0ab10935" 
+				"D1_BINDING": {
+					"id": "a94509c6-0757-43f3-b053-474b0ab10935"
 				}
 			},
 			"kv_namespaces": {
@@ -110,7 +110,10 @@ const (
 			"compatibility_flags": ["production_flag"],
 			"fail_open": false,
 			"always_use_latest_compatibility_date": false,
-			"usage_model": "bundled"
+			"usage_model": "bundled",
+			"placement": {
+				"mode": "smart"
+			}
           }
         },
         "latest_deployment": {
@@ -144,6 +147,9 @@ const (
 			  "type": "secret_text"
 			}
           },
+		  "placement": {
+			"mode": "smart"
+		  },
 		  "compatibility_date": "2022-08-15",
 		  "compatibility_flags": ["deployment_flag"],
 		  "fail_open": false,
@@ -231,6 +237,9 @@ const (
 			  "type": "secret_text"
 			}
           },
+		  "placement": {
+			"mode": "smart"
+		  },
 		  "compatibility_date": "2022-08-15",
 		  "compatibility_flags": ["deployment_flag"],
 		  "fail_open": false,
@@ -338,6 +347,9 @@ var (
 				Value: "",
 				Type:  SecretText,
 			},
+		},
+		Placement: &Placement{
+			Mode: PlacementModeSmart,
 		},
 		CompatibilityFlags: []string{"deployment_flag"},
 		CompatibilityDate:  "2022-08-15",
@@ -452,6 +464,9 @@ var (
 		FailOpen:                         false,
 		AlwaysUseLatestCompatibilityDate: false,
 		UsageModel:                       Bundled,
+		Placement: &Placement{
+			Mode: PlacementModeSmart,
+		},
 	}
 
 	expectedPagesProjectSource = &PagesProjectSource{
@@ -506,7 +521,13 @@ func TestListPagesProjects(t *testing.T) {
 		Count:   1,
 		Total:   1,
 	}
-	actual, resultInfo, err := client.ListPagesProjects(context.Background(), testAccountID, PaginationOptions{})
+
+	_, _, err := client.ListPagesProjects(context.Background(), AccountIdentifier(""), ListPagesProjectsParams{})
+	if assert.Error(t, err) {
+		assert.Equal(t, err.Error(), errMissingAccountID)
+	}
+
+	actual, resultInfo, err := client.ListPagesProjects(context.Background(), AccountIdentifier(testAccountID), ListPagesProjectsParams{})
 	if assert.NoError(t, err) {
 		assert.Equal(t, expectedPagesProjects, actual)
 		assert.Equal(t, expectedResultInfo, resultInfo)
@@ -531,7 +552,12 @@ func TestPagesProject(t *testing.T) {
 
 	mux.HandleFunc("/accounts/"+testAccountID+"/pages/projects/Test Pages Project", handler)
 
-	actual, err := client.PagesProject(context.Background(), testAccountID, "Test Pages Project")
+	_, err := client.GetPagesProject(context.Background(), AccountIdentifier(""), "Test Pages Project")
+	if assert.Error(t, err) {
+		assert.Equal(t, err.Error(), errMissingAccountID)
+	}
+
+	actual, err := client.GetPagesProject(context.Background(), AccountIdentifier(testAccountID), "Test Pages Project")
 	if assert.NoError(t, err) {
 		assert.Equal(t, *expectedPagesProject, actual)
 	}
@@ -555,7 +581,26 @@ func TestCreatePagesProject(t *testing.T) {
 
 	mux.HandleFunc("/accounts/"+testAccountID+"/pages/projects", handler)
 
-	actual, err := client.CreatePagesProject(context.Background(), testAccountID, *expectedPagesProject)
+	params := &CreatePagesProjectParams{
+		SubDomain: "test.pages.dev",
+		Name:      "Test Pages Project",
+		Domains: []string{
+			"testdomain.com",
+			"testdomain.org",
+		},
+		CanonicalDeployment: *expectedPagesProjectDeployment,
+		BuildConfig:         *expectedPagesProjectBuildConfig,
+		DeploymentConfigs:   *expectedPagesProjectDeploymentConfigs,
+		Source:              expectedPagesProjectSource,
+		LatestDeployment:    *expectedPagesProjectDeployment,
+		ProductionBranch:    "main",
+	}
+	_, err := client.CreatePagesProject(context.Background(), AccountIdentifier(""), *params)
+	if assert.Error(t, err) {
+		assert.Equal(t, err.Error(), errMissingAccountID)
+	}
+
+	actual, err := client.CreatePagesProject(context.Background(), AccountIdentifier(testAccountID), *params)
 	if assert.NoError(t, err) {
 		assert.Equal(t, *expectedPagesProject, actual)
 	}
@@ -565,7 +610,8 @@ func TestUpdatePagesProject(t *testing.T) {
 	setup()
 	defer teardown()
 
-	updateAttributes := &PagesProject{
+	updateAttributes := &UpdatePagesProjectParams{
+		ID:   "Test Pages Project",
 		Name: "updated-project-name",
 	}
 
@@ -583,9 +629,12 @@ func TestUpdatePagesProject(t *testing.T) {
 
 	mux.HandleFunc("/accounts/"+testAccountID+"/pages/projects/Test Pages Project", handler)
 
-	_, err := client.UpdatePagesProject(context.Background(), testAccountID, "Test Pages Project", *updateAttributes)
+	_, err := client.UpdatePagesProject(context.Background(), AccountIdentifier(""), *updateAttributes)
+	if assert.Error(t, err) {
+		assert.Equal(t, err.Error(), errMissingAccountID)
+	}
 
-	t.Log(err)
+	_, err = client.UpdatePagesProject(context.Background(), AccountIdentifier(testAccountID), *updateAttributes)
 
 	assert.NoError(t, err)
 }
@@ -608,6 +657,11 @@ func TestDeletePagesProject(t *testing.T) {
 
 	mux.HandleFunc("/accounts/"+testAccountID+"/pages/projects/Test Pages Project", handler)
 
-	err := client.DeletePagesProject(context.Background(), testAccountID, "Test Pages Project")
+	err := client.DeletePagesProject(context.Background(), AccountIdentifier(""), "Test Pages Project")
+	if assert.Error(t, err) {
+		assert.Equal(t, err.Error(), errMissingAccountID)
+	}
+
+	err = client.DeletePagesProject(context.Background(), AccountIdentifier(testAccountID), "Test Pages Project")
 	assert.NoError(t, err)
 }

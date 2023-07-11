@@ -28,7 +28,8 @@ const (
 	"last_complete": "%[2]s",
 	"last_error": "%[2]s",
 	"error_message": "test",
-	"frequency": "high"
+	"frequency": "high",
+	"max_upload_bytes": 5000000
   }
 `
 	serverEdgeLogpushJobDescription = `{
@@ -72,6 +73,7 @@ var (
 		LastError:       &testLogpushTimestamp,
 		ErrorMessage:    "test",
 		Frequency:       "high",
+		MaxUploadBytes:  5000000,
 	}
 	expectedEdgeLogpushJobStruct = LogpushJob{
 		ID:              jobID,
@@ -120,7 +122,7 @@ func TestLogpushJobs(t *testing.T) {
 	mux.HandleFunc("/zones/"+testZoneID+"/logpush/jobs", handler)
 	want := []LogpushJob{expectedLogpushJobStruct}
 
-	actual, err := client.ListZoneLogpushJobs(context.Background(), testZoneID)
+	actual, err := client.ListLogpushJobs(context.Background(), ZoneIdentifier(testZoneID), ListLogpushJobsParams{})
 	if assert.NoError(t, err) {
 		assert.Equal(t, want, actual)
 	}
@@ -160,7 +162,7 @@ func TestGetLogpushJob(t *testing.T) {
 
 			mux.HandleFunc("/zones/"+testZoneID+"/logpush/jobs/"+strconv.Itoa(jobID), handler)
 
-			actual, err := client.GetZoneLogpushJob(context.Background(), testZoneID, jobID)
+			actual, err := client.GetLogpushJob(context.Background(), ZoneIdentifier(testZoneID), jobID)
 			if assert.NoError(t, err) {
 				assert.Equal(t, tc.want, actual)
 			}
@@ -170,31 +172,33 @@ func TestGetLogpushJob(t *testing.T) {
 
 func TestCreateLogpushJob(t *testing.T) {
 	testCases := map[string]struct {
-		newJob  LogpushJob
+		newJob  CreateLogpushJobParams
 		payload string
 		result  string
 		want    LogpushJob
 	}{
 		"core logpush job": {
-			newJob: LogpushJob{
-				Dataset:         "http_requests",
-				Enabled:         false,
-				Name:            "example.com",
-				LogpullOptions:  "fields=RayID,ClientIP,EdgeStartTimestamp&timestamps=rfc3339",
-				DestinationConf: "s3://mybucket/logs?region=us-west-2",
+			newJob: CreateLogpushJobParams{
+				Dataset:          "http_requests",
+				Enabled:          false,
+				Name:             "example.com",
+				LogpullOptions:   "fields=RayID,ClientIP,EdgeStartTimestamp&timestamps=rfc3339",
+				DestinationConf:  "s3://mybucket/logs?region=us-west-2",
+				MaxUploadRecords: 1000,
 			},
 			payload: `{
 				"dataset": "http_requests",
 				"enabled":false,
 				"name":"example.com",
 				"logpull_options":"fields=RayID,ClientIP,EdgeStartTimestamp&timestamps=rfc3339",
-				"destination_conf":"s3://mybucket/logs?region=us-west-2"
+				"destination_conf":"s3://mybucket/logs?region=us-west-2",
+				"max_upload_records": 1000
 			}`,
 			result: serverLogpushJobDescription,
 			want:   expectedLogpushJobStruct,
 		},
 		"edge logpush job": {
-			newJob: LogpushJob{
+			newJob: CreateLogpushJobParams{
 				Dataset:         "http_requests",
 				Enabled:         true,
 				Name:            "example.com",
@@ -214,7 +218,7 @@ func TestCreateLogpushJob(t *testing.T) {
 			want:   expectedEdgeLogpushJobStruct,
 		},
 		"filtered edge logpush job": {
-			newJob: LogpushJob{
+			newJob: CreateLogpushJobParams{
 				Dataset:         "http_requests",
 				Enabled:         true,
 				Name:            "example.com",
@@ -265,7 +269,7 @@ func TestCreateLogpushJob(t *testing.T) {
 
 			mux.HandleFunc("/zones/"+testZoneID+"/logpush/jobs", handler)
 
-			actual, err := client.CreateZoneLogpushJob(context.Background(), testZoneID, tc.newJob)
+			actual, err := client.CreateLogpushJob(context.Background(), ZoneIdentifier(testZoneID), tc.newJob)
 			if assert.NoError(t, err) {
 				assert.Equal(t, tc.want, *actual)
 			}
@@ -276,7 +280,8 @@ func TestCreateLogpushJob(t *testing.T) {
 func TestUpdateLogpushJob(t *testing.T) {
 	setup()
 	defer teardown()
-	updatedJob := LogpushJob{
+	updatedJob := UpdateLogpushJobParams{
+		ID:              jobID,
 		Enabled:         true,
 		Name:            "updated.com",
 		LogpullOptions:  "fields=RayID,ClientIP,EdgeStartTimestamp",
@@ -297,7 +302,7 @@ func TestUpdateLogpushJob(t *testing.T) {
 
 	mux.HandleFunc("/zones/"+testZoneID+"/logpush/jobs/"+strconv.Itoa(jobID), handler)
 
-	err := client.UpdateLogpushJob(context.Background(), testZoneID, jobID, updatedJob)
+	err := client.UpdateLogpushJob(context.Background(), ZoneIdentifier(testZoneID), updatedJob)
 	assert.NoError(t, err)
 }
 
@@ -319,7 +324,7 @@ func TestDeleteLogpushJob(t *testing.T) {
 
 	mux.HandleFunc("/zones/"+testZoneID+"/logpush/jobs/"+strconv.Itoa(jobID), handler)
 
-	err := client.DeleteZoneLogpushJob(context.Background(), testZoneID, jobID)
+	err := client.DeleteLogpushJob(context.Background(), ZoneIdentifier(testZoneID), jobID)
 	assert.NoError(t, err)
 }
 
@@ -343,7 +348,7 @@ func TestGetLogpushOwnershipChallenge(t *testing.T) {
 
 	want := &expectedLogpushGetOwnershipChallengeStruct
 
-	actual, err := client.GetZoneLogpushOwnershipChallenge(context.Background(), testZoneID, "destination_conf")
+	actual, err := client.GetLogpushOwnershipChallenge(context.Background(), ZoneIdentifier(testZoneID), GetLogpushOwnershipChallengeParams{DestinationConf: "destination_conf"})
 	if assert.NoError(t, err) {
 		assert.Equal(t, want, actual)
 	}
@@ -366,7 +371,7 @@ func TestGetLogpushOwnershipChallengeWithInvalidResponse(t *testing.T) {
 	}
 
 	mux.HandleFunc("/zones/"+testZoneID+"/logpush/ownership", handler)
-	_, err := client.GetZoneLogpushOwnershipChallenge(context.Background(), testZoneID, "destination_conf")
+	_, err := client.GetLogpushOwnershipChallenge(context.Background(), ZoneIdentifier(testZoneID), GetLogpushOwnershipChallengeParams{DestinationConf: "destination_conf"})
 
 	assert.Error(t, err)
 }
@@ -404,7 +409,10 @@ func TestValidateLogpushOwnershipChallenge(t *testing.T) {
 
 			mux.HandleFunc("/zones/"+testZoneID+"/logpush/ownership/validate", handler)
 
-			actual, err := client.ValidateZoneLogpushOwnershipChallenge(context.Background(), testZoneID, "destination_conf", "ownership_challenge")
+			actual, err := client.ValidateLogpushOwnershipChallenge(context.Background(), ZoneIdentifier(testZoneID), ValidateLogpushOwnershipChallengeParams{
+				DestinationConf:    "destination_conf",
+				OwnershipChallenge: "ownership_challenge",
+			})
 			if assert.NoError(t, err) {
 				assert.Equal(t, tc.isValid, actual)
 			}
@@ -445,7 +453,7 @@ func TestCheckLogpushDestinationExists(t *testing.T) {
 
 			mux.HandleFunc("/zones/"+testZoneID+"/logpush/validate/destination/exists", handler)
 
-			actual, err := client.CheckZoneLogpushDestinationExists(context.Background(), testZoneID, "destination_conf")
+			actual, err := client.CheckLogpushDestinationExists(context.Background(), ZoneIdentifier(testZoneID), "destination_conf")
 			if assert.NoError(t, err) {
 				assert.Equal(t, tc.exists, actual)
 			}
